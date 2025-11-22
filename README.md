@@ -1,183 +1,97 @@
-# Uniswap v4 Hook Template
+# Orbital Hook: 3-Asset Concentrated Liquidity on Uniswap V4
 
-**A template for writing Uniswap v4 Hooks 🦄**
+**Orbital** is a novel Automated Market Maker (AMM) design implemented as a Uniswap V4 Hook. It brings the efficiency of concentrated liquidity to pools with three or more stablecoins.
 
-### Get Started
+## 🚀 What We Built
 
-This template provides a starting point for writing Uniswap v4 Hooks, including a simple example and preconfigured test environment. Start by creating a new repository using the "Use this template" button at the top right of this page. Alternatively you can also click this link:
+We built a **Uniswap V4 Hook** that manages a custom liquidity curve for 3 assets (USDC, USDT, DAI). Unlike standard Uniswap V3/V4 pools which are pairwise (2 assets), Orbital allows for multi-asset swaps within a single pool structure by managing the accounting and math externally in the hook.
 
-[![Use this Template](https://img.shields.io/badge/Use%20this%20Template-101010?style=for-the-badge&logo=github)](https://github.com/uniswapfoundation/v4-template/generate)
+### Key Features:
 
-1. The example hook [Counter.sol](src/Counter.sol) demonstrates the `beforeSwap()` and `afterSwap()` hooks
-2. The test template [Counter.t.sol](test/Counter.t.sol) preconfigures the v4 pool manager, test tokens, and test liquidity.
+- **3-Asset Pool**: Supports swapping between USDC, USDT, and DAI in a single pool.
+- **Concentrated Liquidity**: Uses a spherical cap geometry ("Orbits") to concentrate liquidity around the $1.00 peg.
+- **Custom Accounting**: Bypasses the standard PoolManager liquidity system to implement custom 3-asset reserves and pricing logic.
+
+## 💡 How It Works (Simple Terms)
+
+Imagine a standard liquidity pool as a balance scale with two buckets. If you add to one, the other goes up. This works great for 2 tokens.
+
+**Orbital** changes the geometry. Instead of a line or a curve on a 2D plane, imagine a **sphere** in 3D space.
+
+- The "perfect price" (1:1:1) is the center of the sphere.
+- Liquidity is provided in "orbits" around this center.
+- When you swap, you move along the surface of this sphere.
+
+This allows us to have a single pool where you can swap USDC -> DAI, DAI -> USDT, or USDT -> USDC, all using the same shared liquidity, which is much more efficient than having three separate pools (USDC/DAI, DAI/USDT, USDT/USDC).
 
 <details>
-<summary>Updating to v4-template:latest</summary>
+<summary><strong>📐 Detailed Math Logic (Click to Expand)</strong></summary>
 
-This template is actively maintained -- you can update the v4 dependencies, scripts, and helpers:
+### The Orbital Invariant
 
-```bash
-git remote add template https://github.com/uniswapfoundation/v4-template
-git fetch template
-git merge template/main <BRANCH> --allow-unrelated-histories
-```
+The core invariant for the Orbital curve is based on the equation of a sphere (or hypersphere for n > 3).
+
+For 3 assets with reserves $x, y, z$, and a large radius parameter $R$:
+
+$$ (R - x)^2 + (R - y)^2 + (R - z)^2 = L^2 $$
+
+Where:
+
+- $R$ is a large constant (the "Radius" of the universe).
+- $x, y, z$ are the normalized balances of the tokens in the pool.
+- $L$ is the current "distance" from the origin (related to the total liquidity).
+
+### Swap Math
+
+When a user swaps $\Delta x$ (input) for $\Delta y$ (output):
+
+1. **Calculate New X**: $x_{new} = x + \Delta x$
+2. **Calculate New Y Term**:
+   We solve for the new $y$ that keeps $L^2$ constant.
+   $$ (R - x*{new})^2 + (R - y*{new})^2 + (R - z)^2 = L^2 $$
+   $$ (R - y*{new})^2 = L^2 - (R - x*{new})^2 - (R - z)^2 $$
+3. **Solve for Output**:
+   $$ y*{new} = R - \sqrt{(R - y*{new})^2} $$
+   $$ \Delta y = y - y\_{new} $$
+
+This formula ensures that the "distance" $L$ remains constant during a swap, similar to how $x \cdot y = k$ keeps the product constant in Uniswap V2.
 
 </details>
 
-### Requirements
+## 🛠️ How to Run Locally
 
-This template is designed to work with Foundry (stable). If you are using Foundry Nightly, you may encounter compatibility issues. You can update your Foundry installation to the latest stable version by running:
+You can simulate the Orbital Hook logic locally using Foundry. We have set up a script that forks Ethereum Mainnet to use real USDC, USDT, and DAI tokens.
 
-```
-foundryup
-```
+### Prerequisites
 
-To set up the project, run the following commands in your terminal to install dependencies and run the tests:
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) installed.
 
-```
-forge install
-forge test
-```
+### Steps
 
-### Local Development
+1. **Clone the repo**
 
-Other than writing unit tests (recommended!), you can only deploy & test hooks on [anvil](https://book.getfoundry.sh/anvil/) locally. Scripts are available in the `script/` directory, which can be used to deploy hooks, create pools, provide liquidity and swap tokens. The scripts support both local `anvil` environment as well as running them directly on a production network.
+   ```bash
+   git clone <repo-url>
+   ```
 
-### Executing locally with using **Anvil**:
+2. **Run the Interaction Script**
+   This script deploys the hook to a local fork, adds liquidity, and performs a swap, logging all the balance changes to the console.
 
-1. Start Anvil (or fork a specific chain using anvil):
+   ```bash
+   forge script script/OrbitalInteraction.s.sol \
+     --fork-url https://eth-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY \
+     -vvvv
+   ```
 
-```bash
-anvil
-```
+   _(Replace `YOUR_ALCHEMY_KEY` with a valid Mainnet RPC URL)_
 
-or
+3. **What to Expect**
+   You will see logs showing:
+   - The deployment of the OrbitalHook.
+   - "Adding Liquidity": Balances of the user decreasing and the Hook increasing.
+   - "L_SQUARED updated": The invariant being calculated.
+   - "Swapping": The user sending USDC and receiving USDT based on the Orbital curve math.
 
-```bash
-anvil --fork-url <YOUR_RPC_URL>
-```
+## 📜 License
 
-2. Execute scripts:
-
-```bash
-forge script script/00_DeployHook.s.sol \
-    --rpc-url http://localhost:8545 \
-    --private-key <PRIVATE_KEY> \
-    --broadcast
-```
-
-### Using **RPC URLs** (actual transactions):
-
-:::info
-It is best to not store your private key even in .env or enter it directly in the command line. Instead use the `--account` flag to select your private key from your keystore.
-:::
-
-### Follow these steps if you have not stored your private key in the keystore:
-
-<details>
-
-1. Add your private key to the keystore:
-
-```bash
-cast wallet import <SET_A_NAME_FOR_KEY> --interactive
-```
-
-2. You will prompted to enter your private key and set a password, fill and press enter:
-
-```
-Enter private key: <YOUR_PRIVATE_KEY>
-Enter keystore password: <SET_NEW_PASSWORD>
-```
-
-You should see this:
-
-```
-`<YOUR_WALLET_PRIVATE_KEY_NAME>` keystore was saved successfully. Address: <YOUR_WALLET_ADDRESS>
-```
-
-::: warning
-Use `history -c` to clear your command history.
-:::
-
-</details>
-
-1. Execute scripts:
-
-```bash
-forge script script/00_DeployHook.s.sol \
-    --rpc-url <YOUR_RPC_URL> \
-    --account <YOUR_WALLET_PRIVATE_KEY_NAME> \
-    --sender <YOUR_WALLET_ADDRESS> \
-    --broadcast
-```
-
-You will prompted to enter your wallet password, fill and press enter:
-
-```
-Enter keystore password: <YOUR_PASSWORD>
-```
-
-### Key Modifications to note:
-
-1. Update the `token0` and `token1` addresses in the `BaseScript.sol` file to match the tokens you want to use in the network of your choice for sepolia and mainnet deployments.
-2. Update the `token0Amount` and `token1Amount` in the `CreatePoolAndAddLiquidity.s.sol` file to match the amount of tokens you want to provide liquidity with.
-3. Update the `token0Amount` and `token1Amount` in the `AddLiquidity.s.sol` file to match the amount of tokens you want to provide liquidity with.
-4. Update the `amountIn` and `amountOutMin` in the `Swap.s.sol` file to match the amount of tokens you want to swap.
-
-### Verifying the hook contract
-
-```bash
-forge verify-contract \
-  --rpc-url <URL> \
-  --chain <CHAIN_NAME_OR_ID> \
-  # Generally etherscan
-  --verifier <Verification_Provider> \
-  # Use --etherscan-api-key <ETHERSCAN_API_KEY> if you are using etherscan
-  --verifier-api-key <Verification_Provider_API_KEY> \
-  --constructor-args <ABI_ENCODED_ARGS> \
-  --num-of-optimizations <OPTIMIZER_RUNS> \
-  <Contract_Address> \
-  <path/to/Contract.sol:ContractName>
-  --watch
-```
-
-### Troubleshooting
-
-<details>
-
-#### Permission Denied
-
-When installing dependencies with `forge install`, Github may throw a `Permission Denied` error
-
-Typically caused by missing Github SSH keys, and can be resolved by following the steps [here](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)
-
-Or [adding the keys to your ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent), if you have already uploaded SSH keys
-
-#### Anvil fork test failures
-
-Some versions of Foundry may limit contract code size to ~25kb, which could prevent local tests to fail. You can resolve this by setting the `code-size-limit` flag
-
-```
-anvil --code-size-limit 40000
-```
-
-#### Hook deployment failures
-
-Hook deployment failures are caused by incorrect flags or incorrect salt mining
-
-1. Verify the flags are in agreement:
-   - `getHookCalls()` returns the correct flags
-   - `flags` provided to `HookMiner.find(...)`
-2. Verify salt mining is correct:
-   - In **forge test**: the _deployer_ for: `new Hook{salt: salt}(...)` and `HookMiner.find(deployer, ...)` are the same. This will be `address(this)`. If using `vm.prank`, the deployer will be the pranking address
-   - In **forge script**: the deployer must be the CREATE2 Proxy: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
-     - If anvil does not have the CREATE2 deployer, your foundry may be out of date. You can update it with `foundryup`
-
-</details>
-
-### Additional Resources
-
-- [Uniswap v4 docs](https://docs.uniswap.org/contracts/v4/overview)
-- [v4-periphery](https://github.com/uniswap/v4-periphery)
-- [v4-core](https://github.com/uniswap/v4-core)
-- [v4-by-example](https://v4-by-example.org)
+MIT
