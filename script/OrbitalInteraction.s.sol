@@ -35,7 +35,7 @@ contract OrbitalInteraction is BaseScript {
 
         // 2. Prefund Wallet
         vm.deal(user, 100 ether);
-        
+
         address usdcWhale = 0x7713974908Be4BEd47172370115e8b1219F4A5f0;
         address usdtWhale = 0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503;
         address daiWhale = 0x40ec5B33f54e0E8A33A975908C5BA1c14e5BbbDf;
@@ -52,19 +52,20 @@ contract OrbitalInteraction is BaseScript {
         address(DAI).safeTransfer(user, 1_000_000 * 1e18);
         vm.stopPrank();
 
-        vm.startBroadcast();
-
         // 3. Approve Hook and Router
+        vm.startPrank(user);
         address(USDC).safeApprove(address(hook), type(uint256).max);
         address(USDT).safeApprove(address(hook), type(uint256).max);
         address(DAI).safeApprove(address(hook), type(uint256).max);
-        
+
         address(USDC).safeApprove(address(swapRouter), type(uint256).max);
         address(USDT).safeApprove(address(swapRouter), type(uint256).max);
         address(DAI).safeApprove(address(swapRouter), type(uint256).max);
 
         // 4. Add Liquidity
-        console.log("Adding Liquidity...");
+        console.log("--- Adding Liquidity ---");
+        logBalances(user, address(hook), "Before Liquidity");
+        
         hook.addLiquidity(
             100_000 * 1e6, // USDC
             100_000 * 1e6, // USDT
@@ -72,23 +73,44 @@ contract OrbitalInteraction is BaseScript {
             user
         );
         
+        logBalances(user, address(hook), "After Liquidity");
+
         // 5. Initialize Pools
         uint160 SQRT_PRICE_1_1 = 79228162514264337593543950336;
-        
+
         initializePool(USDC, USDT, hookAddress, SQRT_PRICE_1_1);
         initializePool(USDT, DAI, hookAddress, SQRT_PRICE_1_1);
         initializePool(USDC, DAI, hookAddress, SQRT_PRICE_1_1);
 
         // 6. Swap USDC -> USDT
-        console.log("Swapping USDC -> USDT...");
+        console.log("--- Swapping USDC -> USDT ---");
+        logBalances(user, address(hook), "Before Swap");
+        
         swap(USDC, USDT, hookAddress, 1000 * 1e6);
-
-        vm.stopBroadcast();
+        
+        logBalances(user, address(hook), "After Swap");
+        
+        vm.stopPrank();
     }
 
-    function initializePool(address tokenA, address tokenB, address hook, uint160 sqrtPriceX96) internal {
-        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-        
+    function logBalances(address user, address hook, string memory label) internal view {
+        console.log(label);
+        console.log("User USDC:", IERC20(USDC).balanceOf(user));
+        console.log("User USDT:", IERC20(USDT).balanceOf(user));
+        console.log("Hook USDC:", IERC20(USDC).balanceOf(hook));
+        console.log("Hook USDT:", IERC20(USDT).balanceOf(hook));
+    }
+
+    function initializePool(
+        address tokenA,
+        address tokenB,
+        address hook,
+        uint160 sqrtPriceX96
+    ) internal {
+        (address token0, address token1) = tokenA < tokenB
+            ? (tokenA, tokenB)
+            : (tokenB, tokenA);
+
         PoolKey memory key = PoolKey({
             currency0: Currency.wrap(token0),
             currency1: Currency.wrap(token1),
@@ -96,13 +118,18 @@ contract OrbitalInteraction is BaseScript {
             tickSpacing: 60,
             hooks: IHooks(hook)
         });
-        
+
         poolManager.initialize(key, sqrtPriceX96);
     }
 
-    function swap(address tokenIn, address tokenOut, address hook, uint256 amountIn) internal {
+    function swap(
+        address tokenIn,
+        address tokenOut,
+        address hook,
+        uint256 amountIn
+    ) internal {
         bool zeroForOne = tokenIn < tokenOut;
-        
+
         PathKey[] memory path = new PathKey[](1);
         path[0] = PathKey({
             intermediateCurrency: Currency.wrap(tokenOut),

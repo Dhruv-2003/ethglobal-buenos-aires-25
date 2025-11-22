@@ -195,19 +195,25 @@ contract OrbitalHook is BaseHook, ERC20, IUnlockCallback {
         _updateLSquared();
 
         // 6. Update PoolManager Accounting
-        // We mint input tokens to ourselves (credit) and burn output tokens (debit)
-        poolManager.mint(address(this), inputCurrency.toId(), amountIn);
-        poolManager.burn(address(this), outputCurrency.toId(), amountOut);
+        // We take input tokens from PoolManager (which received them from swapper)
+        poolManager.take(inputCurrency, address(this), amountIn);
+        
+        // We send output tokens to PoolManager (to be sent to swapper)
+        poolManager.sync(outputCurrency);
+        Currency.unwrap(outputCurrency).safeTransfer(address(poolManager), amountOut);
+        poolManager.settle();
 
         // 7. Return Delta to PoolManager
-        // If Exact Input: Specified (Input) = +amountIn, Unspecified (Output) = -amountOut
-        // If Exact Output: Specified (Output) = -amountOut, Unspecified (Input) = +amountIn
+        // The delta returned must match the swap execution from the Pool's perspective.
+        // toBeforeSwapDelta takes (int128 delta0, int128 delta1)
         
         BeforeSwapDelta hookDelta;
-        if (exactInput) {
-            hookDelta = toBeforeSwapDelta(int128(int256(amountIn)), -int128(int256(amountOut)));
+        if (params.zeroForOne) {
+             // Input = Token0, Output = Token1
+             hookDelta = toBeforeSwapDelta(int128(int256(amountIn)), -int128(int256(amountOut)));
         } else {
-            hookDelta = toBeforeSwapDelta(-int128(int256(amountOut)), int128(int256(amountIn)));
+             // Input = Token1, Output = Token0
+             hookDelta = toBeforeSwapDelta(-int128(int256(amountOut)), int128(int256(amountIn)));
         }
 
         return (BaseHook.beforeSwap.selector, hookDelta, 0);
@@ -385,9 +391,16 @@ contract OrbitalHook is BaseHook, ERC20, IUnlockCallback {
             amount2 = shares.mulDiv(r2, totalShares);
         }
         
-        // Use PoolManager to handle funds
-        bytes memory data = abi.encode(uint8(1), amount0, amount1, amount2, msg.sender);
-        poolManager.unlock(data);
+        // Transfer tokens directly to the Hook
+        if (amount0 > 0) {
+            Currency.unwrap(token0).safeTransferFrom(msg.sender, address(this), amount0);
+        }
+        if (amount1 > 0) {
+            Currency.unwrap(token1).safeTransferFrom(msg.sender, address(this), amount1);
+        }
+        if (amount2 > 0) {
+            Currency.unwrap(token2).safeTransferFrom(msg.sender, address(this), amount2);
+        }
         
         reserves[token0] += amount0;
         reserves[token1] += amount1;
@@ -422,59 +435,18 @@ contract OrbitalHook is BaseHook, ERC20, IUnlockCallback {
         
         _updateLSquared();
         
-        // Use PoolManager to handle funds
-        bytes memory data = abi.encode(uint8(2), amount0, amount1, amount2, to);
-        poolManager.unlock(data);
+        // Transfer tokens directly to user
+        if (amount0 > 0) Currency.unwrap(token0).safeTransfer(to, amount0);
+        if (amount1 > 0) Currency.unwrap(token1).safeTransfer(to, amount1);
+        if (amount2 > 0) Currency.unwrap(token2).safeTransfer(to, amount2);
         
         emit LiquidityRemoved(msg.sender, amount0, amount1, amount2, shares);
     }
 
     function unlockCallback(bytes calldata data) external override returns (bytes memory) {
-        require(msg.sender == address(poolManager), "Only PoolManager");
-        
-        (uint8 action, uint256 amount0, uint256 amount1, uint256 amount2, address user) = abi.decode(data, (uint8, uint256, uint256, uint256, address));
-        
-        if (action == 1) { // Add Liquidity
-            if (amount0 > 0) {
-                _settle(token0, user, amount0);
-                poolManager.mint(address(this), token0.toId(), amount0);
-            }
-            if (amount1 > 0) {
-                _settle(token1, user, amount1);
-                poolManager.mint(address(this), token1.toId(), amount1);
-            }
-            if (amount2 > 0) {
-                _settle(token2, user, amount2);
-                poolManager.mint(address(this), token2.toId(), amount2);
-            }
-        } else if (action == 2) { // Remove Liquidity
-            if (amount0 > 0) {
-                poolManager.burn(address(this), token0.toId(), amount0);
-                _take(token0, user, amount0);
-            }
-            if (amount1 > 0) {
-                poolManager.burn(address(this), token1.toId(), amount1);
-                _take(token1, user, amount1);
-            }
-            if (amount2 > 0) {
-                poolManager.burn(address(this), token2.toId(), amount2);
-                _take(token2, user, amount2);
-            }
-        }
-        
+        // Not used anymore as we handle transfers directly
         return "";
     }
-
-    function _settle(Currency currency, address payer, uint256 amount) internal {
-        poolManager.sync(currency);
-        Currency.unwrap(currency).safeTransferFrom(payer, address(poolManager), amount);
-        poolManager.settle();
-    }
-
-    function _take(Currency currency, address recipient, uint256 amount) internal {
-        poolManager.take(currency, recipient, amount);
-    }
-
     function _updateLSquared() internal {
         uint256 x = _to18(reserves[token0], decimals0);
         uint256 y = _to18(reserves[token1], decimals1);
