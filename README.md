@@ -2,6 +2,10 @@
 
 **Orbital** is a novel Automated Market Maker (AMM) design implemented as a Uniswap V4 Hook. It brings the efficiency of concentrated liquidity to pools with three or more stablecoins.
 
+Checkout the [OrbitalHook.sol](./src/OrbitalHook.sol) for the full implementation.
+
+[Demo Video](https://youtu.be/0uB6P_pKQxM)
+
 ## 🚀 What We Built
 
 We built a **Uniswap V4 Hook** that manages a custom liquidity curve for 3 assets (USDC, USDT, DAI). Unlike standard Uniswap V3/V4 pools which are pairwise (2 assets), Orbital allows for multi-asset swaps within a single pool structure by managing the accounting and math externally in the hook.
