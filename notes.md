@@ -9,8 +9,8 @@
 - [x] Create 3 pools with the hook integrated
 - [x] Add scripts for deployement
 - [x] Write tests for the hook functionality
-- [ ] Test on mainnet fork
-- [ ] Document the hook design and usage
-- [ ] Excali draw diagram for the hook architecture
-- [ ] Prepare presentation for the hackathon
-- [ ] Polish and refactor the code
+- [x] Test on mainnet fork
+- [x] Document the hook design and usage
+- [x] Excali draw diagram for the hook architecture
+- [x] Prepare presentation for the hackathon
+- [x] Polish and refactor the code

@@ -6,6 +6,8 @@
 
 We built a **Uniswap V4 Hook** that manages a custom liquidity curve for 3 assets (USDC, USDT, DAI). Unlike standard Uniswap V3/V4 pools which are pairwise (2 assets), Orbital allows for multi-asset swaps within a single pool structure by managing the accounting and math externally in the hook.
 
+Read more about Orbital from the official paradigm blog post: [Orbital](https://www.paradigm.xyz/2025/06/orbital)
+
 ### Key Features:
 
 - **3-Asset Pool**: Supports swapping between USDC, USDT, and DAI in a single pool.
@@ -91,6 +93,16 @@ You can simulate the Orbital Hook logic locally using Foundry. We have set up a 
    - "Adding Liquidity": Balances of the user decreasing and the Hook increasing.
    - "L_SQUARED updated": The invariant being calculated.
    - "Swapping": The user sending USDC and receiving USDT based on the Orbital curve math.
+
+## NOTES
+
+- The current implementation is a prototype for demonstration purposes. It may not be optimized for gas efficiency or security for production use.
+- The current implementation assumes the fees to be 0.1% which is hardcoded in the swap logic, and causing the major deviation from the ideal invariant curve.
+
+## Future Work
+
+- **Gas Optimization**: Refine the hook logic to minimize gas costs.
+- **Pool Tick Management**: Implement tick management for better liquidity concentration even in orbital harnessing the actual benefits of Orbital.
 
 ## 📜 License
 
